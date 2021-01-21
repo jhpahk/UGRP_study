@@ -1,9 +1,7 @@
 import numpy as np
 import cv2
 
-def find_x(x1, y1, x2, y2, target_y):
-    return x1 + ((x2 - x1) / (y2 - y1)) * (target_y - y1)
-
+# (x11, y11), (x12, y12)를 지나는 직선과 (x21, y21), (x22, y22)를 지나는 직선의 교점을 리턴
 def find_cross_point(x11, y11, x12, y12, x21, y21, x22, y22):
     if x12 == x11 or x22 == x21:
         return None
@@ -19,6 +17,7 @@ def find_cross_point(x11, y11, x12, y12, x21, y21, x22, y22):
 imgfile = "slope_test.jpg"
 videofile = "car_driving.mp4"
 
+# imgfile/videofile로 경로를 지정해 이미지/비디오 파일을 읽어들인다
 img = cv2.imread(imgfile, cv2.IMREAD_COLOR)
 cap = cv2.VideoCapture(videofile)
 
@@ -28,22 +27,24 @@ if cap.isOpened():
     while True:
         ret, img = cap.read()   # next frame을 read. 성공적으로 read 했으면 ret = True, img에는 next frame이 들어간다.
 
-        height = len(img)
-        width = len(img[0])
-        ROI = img[height // 2 : height, : ]
+        height = len(img)   # 이미지의 세로 size
+        width = len(img[0]) # 이미지의 가로 size
+        ROI = img[height // 2 : height, : ] # Region Of Interest, 차선에만 집중하기 위해 이미지의 아래쪽 반절만을 관심 영역으로 설정한다.
 
-        gray_img = cv2.cvtColor(ROI, cv2.COLOR_RGB2GRAY)
-        blur_img = cv2.GaussianBlur(gray_img, (5, 5), 0)
+        gray_img = cv2.cvtColor(ROI, cv2.COLOR_RGB2GRAY)    # 이미지를 흑백으로
+        blur_img = cv2.GaussianBlur(gray_img, (5, 5), 0)    # 5 X 5 Gaussian Filter로 이미지를 흐리게 만들어 노이즈를 제거
 
-        canny_edge = cv2.Canny(blur_img, 50, 150)
-        lines = cv2.HoughLines(canny_edge, 1, np.pi/180, 100, min_theta=-np.pi/3, max_theta=np.pi/3)
+        canny_edge = cv2.Canny(blur_img, 50, 150)       # Canny Edge Detection
+        lines = cv2.HoughLines(canny_edge, 1, np.pi/180, 100, min_theta=-np.pi/3, max_theta=np.pi/3)    # Hough Transform -> threshold = 100 이고, 기울기가 수평에 가까운 직선은 검출하지 않기 위해 기울기를 제한.
 
-        x_ground_list = []
-        r_theta_list = []
+        # 붙어있는 직선들 중 하나만 검출하기 위해 따로 처리함 -> 특정 y 좌표에서의 x 값이 비슷한 직선들을 서로 근접한 직선으로 판단하고 중앙에 있는 직선 하나만 선택함
+        x_ground_list = []      # y 좌표가 이미지의 아래쪽 끝(y = height)일 때의 x 값들을 저장하는 list
+        r_theta_list = []       # 해당하는 r과 theta를 저장하는 list
         if lines is not None:
             for line in lines:
                 r, theta = line[0]
 
+                # 직선을 그리기 위해 이미지상에 표시될 직선의 두 점 계산
                 a = np.cos(theta)
                 b = np.sin(theta)
                 x0 = r * a
@@ -103,14 +104,14 @@ if cap.isOpened():
 
                 lines_points.append((x1, y1, x2, y2))
 
-            if len(lines_points) == 2:
+            if len(lines_points) == 2:  # 목표는 차선 양쪽 2개만을 검출하는 것 -> 2개의 직선이 성공적으로 검출되었으면 img위에 나타내기
                 cx, cy = find_cross_point(lines_points[0][0], lines_points[0][1], lines_points[0][2], lines_points[0][3], lines_points[1][0], lines_points[1][1], lines_points[1][2], lines_points[1][3])
                 cx, cy = map(int, [cx, cy])
                 cv2.line(ROI, (lines_points[0][0], lines_points[0][1]), (cx, cy), (0, 255, 0), 2)
                 cv2.line(ROI, (lines_points[1][0], lines_points[1][1]), (cx, cy), (0, 255, 0), 2)
                 ex_lines = (lines_points[0], lines_points[1])
                 ex_cross_points = (cx, cy)
-            else:
+            else:   # 직선 2개만 검출하는 데에 실패했으면 이전에 계산한 직선을 그대로 표시 -> 차선이 급격하게 바뀌지 않으므로...
                 if ex_lines == None:
                     continue
                 else:
